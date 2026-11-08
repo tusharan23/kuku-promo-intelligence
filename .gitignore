@@ -1,0 +1,24 @@
+# Environment, development files, and OS artifacts
+.env
+.env.*
+!.env.example
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.DS_Store
+__MACOSX/
+.streamlit/secrets.toml
+
+# Company scripts and private generated material
+.cache/
+outputs/
+*.zip
+episode-*.txt
+scripts/
+private_inputs/
+kuku_raw_run.json
+kuku_promo_shortlist.csv
+human_reviews.json
+raw_run.json
+promo_shortlist.csv

@@ -1,0 +1,46 @@
+EPISODE NUMBER: Episode 1
+EPISODE LOGLINE: Mira receives an unexpected message at a deserted lighthouse.
+CONTINUITY NOTES: Opening episode, no previous context.
+
+--- SCRIPT START ---
+
+SCENE 01
+Scene heading: INT. LIGHTHOUSE - NIGHT
+Scene start: 00:00.00
+Scene end: 00:48.00
+
+Actions and dialogue:
+
+**ACTION:**
+Start: (00:00.00) | End: (00:02.00)
+The lighthouse door slams shut behind Mira. A bloodstained envelope slides under the door.
+
+**MIRA (Shocked):**
+Start: (00:02.00) | End: (00:05.00)
+"That handwriting. It belongs to my brother!"
+
+**ACTION:**
+Start: (00:05.00) | End: (00:16.00)
+Mira tears open the envelope and finds a photograph dated tomorrow.
+
+**MIRA (Fearful):**
+Start: (00:16.00) | End: (00:19.00)
+"How can this photograph be from tomorrow?"
+
+**ACTION:**
+Start: (00:19.00) | End: (00:29.00)
+Footsteps creak on the staircase. The light flickers. Mira backs away from the steps.
+
+**STRANGER (Off-screen):**
+Start: (00:29.00) | End: (00:32.00)
+"You weren't supposed to open that."
+
+**MIRA (Demanding):**
+Start: (00:32.00) | End: (00:36.00)
+"Who are you? Show yourself!"
+
+**ACTION:**
+Start: (00:36.00) | End: (00:48.00)
+A gloved hand emerges from the shadows holding an identical envelope. Cut to black.
+
+--- SCRIPT END ---

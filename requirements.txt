@@ -1,0 +1,4 @@
+streamlit>=1.36,<2
+# Needed only for Gemini AI mode, not for the offline baseline:
+google-genai>=1.0,<2
+pytest>=8,<10
