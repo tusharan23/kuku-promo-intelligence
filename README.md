@@ -75,13 +75,6 @@ A private 50-episode test pack produced the following reproducible run summary:
 - The heuristic prefilter may miss unusual but compelling scenes. Evaluate failures and omissions honestly.
 - Some submitted scripts have atypical capitalization or scenes with short durations; parsing is case-insensitive and events use episode-level timings.
 
-## Safety and confidentiality
-
-The input scripts are Kuku's confidential material. Do not publish the input pack, include it in a public repository, or deploy an app with scripts preloaded. A public demo can use a fictional example script instead. Gemini AI mode **sends screenplay excerpts to a third-party provider**; check their data-processing terms and get comfortable with the tradeoff before enabling it. Free-tier provider prompts may be used to improve their products. All scripts are read in memory by default; the `.cache` folder and `outputs` directory (which may contain source excerpts) are gitignored.
-
-## Interview demonstration
-
-Upload a new similarly formatted screenplay ZIP or a single episode TXT, click **Find promo moments**, inspect timestamps and source excerpts, show ranking and raw outputs, and explain one genuine failure. The AI provider/model is a replaceable function rather than mixed into parsing logic.
 
 ## Test
 
