@@ -89,9 +89,3 @@ Upload a new similarly formatted screenplay ZIP or a single episode TXT, click *
 python -m pytest -q
 ```
 
-## Package / GitHub checklist
-
-Only commit `app.py`, `promo_core.py`, `promo_ai.py`, `cli.py`, `requirements.txt`, `.gitignore`, `README.md`, `tests/`, and `examples/fictional_demo_episode.txt`.
-Keep `.venv/`, `.cache/`, unedited Kuku scripts, generated raw outputs, and review notes **out of public GitHub**. Submit the raw outputs separately using the assignment's requested sharing workflow. Never commit API keys.
-
-**Rate limits:** Gemini mode spaces *uncached* requests (about 6 seconds between calls) and makes a bounded retry after a 429. If you still see quota errors, retain previous outputs and report the partial AI coverage. `ai_successful` is the number of candidate clips with both semantic evaluations, not the number of model requests.
