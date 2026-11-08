@@ -76,6 +76,16 @@ A private 50-episode test pack produced the following reproducible run summary:
 - Some submitted scripts have atypical capitalization or scenes with short durations; parsing is case-insensitive and events use episode-level timings.
 
 
+## Safety and confidentiality
+
+The assignment screenplays are proprietary. Do not publish the script pack, include it in this repository, or preload it in a public demo. The fictional sample in `examples/` is safe for demonstrating the parser. AI mode sends selected screenplay excerpts to an external Gemini API; review data-handling permissions before using confidential inputs. Keep `.cache/`, `outputs/`, local environment files and unedited raw outputs out of Git.
+
+## Interview demonstration
+
+Upload a new timestamped screenplay TXT or ZIP, run the offline baseline, inspect exact timestamps and source evidence, and explain a genuine failure (for example, a weak cliffhanger or a cut within dialogue). Optional Gemini mode needs a private API key and can be rate-limited.
+
+**Rate limits:** Gemini evaluation spaces uncached requests and retries temporary 429 errors once. `ai_successful` counts candidates with completed semantic evaluations, not raw model requests. Preserve the original raw run when testing improvements.
+
 ## Test
 
 ```bash
