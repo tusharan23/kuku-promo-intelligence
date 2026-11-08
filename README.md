@@ -1,8 +1,8 @@
 # Kuku Promo Intelligence — screenplay promo finder
 
-**Status:** working parser + deterministic candidate generator; optional Gemini semantic evaluation.
+**Built with:** Python, Streamlit, and Gemini API for screenplay-based promo discovery.
 
-This project discovers continuous 20–60-second promotional moments from timestamped microdrama screenplays. Python produces actual time boundaries; AI (when enabled) assesses hook, cold-viewer clarity, cliffhanger, and pacing. It does **not** create or edit video.
+This project discovers continuous 20–60-second promotional moments from timestamped microdrama screenplays. Python produces actual time boundaries; AI (when enabled) assesses hook, cold-viewer clarity, cliffhanger, and pacing.
 
 ## Run locally (Mac / Windows / Linux)
 
@@ -65,26 +65,13 @@ A private 50-episode test pack produced the following reproducible run summary:
 
 **Quality check:** A separate AI-assisted review of the timestamped screenplay found weak cliffhangers in some recommendations and one cut that ended during a spoken line. The project reports these as limitations; it does not claim a human video review or improved viewer retention. The private screenplay pack and raw result files are intentionally not included in this repository.
 
-## What is and isn't proven
+## Limitations
 
-- Parser tests and duration validation **can** establish correct input coverage and timestamps.
-- Heuristic scores are **not** an AI quality assessment. The app labels this explicitly.
-- LLM scores are **model judgments**, not measured promo engagement or viewer retention.
-- The script is not the actual video, so final on-screen pacing and visual execution need footage review.
-- The version 1 candidate generator considers **continuous clips only**, not multi-episode stitched promos.
-- The heuristic prefilter may miss unusual but compelling scenes. Evaluate failures and omissions honestly.
-- Some submitted scripts have atypical capitalization or scenes with short durations; parsing is case-insensitive and events use episode-level timings.
+- Gemini evaluates a selected subset of candidate windows; heuristic prefiltering can miss better moments.
+- Script timing may not exactly match footage, so proposed cut points need a final editor check.
+- The first version supports continuous clips; it does not assemble multi-scene promos.
+- Model scores are editorial estimates, not measured engagement.
 
-
-## Safety and confidentiality
-
-The assignment screenplays are proprietary. Do not publish the script pack, include it in this repository, or preload it in a public demo. The fictional sample in `examples/` is safe for demonstrating the parser. AI mode sends selected screenplay excerpts to an external Gemini API; review data-handling permissions before using confidential inputs. Keep `.cache/`, `outputs/`, local environment files and unedited raw outputs out of Git.
-
-## Interview demonstration
-
-Upload a new timestamped screenplay TXT or ZIP, run the offline baseline, inspect exact timestamps and source evidence, and explain a genuine failure (for example, a weak cliffhanger or a cut within dialogue). Optional Gemini mode needs a private API key and can be rate-limited.
-
-**Rate limits:** Gemini evaluation spaces uncached requests and retries temporary 429 errors once. `ai_successful` counts candidates with completed semantic evaluations, not raw model requests. Preserve the original raw run when testing improvements.
 
 ## Test
 
