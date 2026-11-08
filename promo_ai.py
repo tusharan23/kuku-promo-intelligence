@@ -24,11 +24,11 @@ Give evidence event IDs that exist in the clip. Return only valid JSON.
 '''
 
 
-def _safe_int(value, default: int = 1) -> int:
-    try:
-        return min(5, max(0, int(value)))
-    except (ValueError, TypeError):
-        return default
+def _safe_int(value) -> int:
+    """Refuse malformed scores instead of silently substituting a good-looking value."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or int(value) != value or not 0 <= value <= 5:
+        raise ValueError(f'Invalid AI component score: {value!r}')
+    return int(value)
 
 
 def _clip_for_llm(ep: Episode, c: dict) -> dict:
@@ -131,22 +131,52 @@ Return one result for every supplied candidate and don't invent identifiers.
     return RUBRIC + '\n' + system + '\nCANDIDATES:\n' + json.dumps(payload, ensure_ascii=False)
 
 
-def _valid_results(blob: dict, batch: list[dict]) -> dict:
+def _valid_results(blob: dict, batch: list[dict], phase: str | None = None) -> dict:
+    """Keep only complete, typed, unambiguous AI records from the requested batch."""
+    if not isinstance(blob, dict) or not isinstance(blob.get('results'), list):
+        return {}
     found = {c['id'] for c in batch}
-    return {v['id']: v for v in blob.get('results', [])
-            if isinstance(v, dict) and isinstance(v.get('id'), str) and v['id'] in found}
+    valid, duplicate = {}, set()
+    for v in blob['results']:
+        if not isinstance(v, dict) or not isinstance(v.get('id'), str) or v['id'] not in found:
+            continue
+        key = v['id']
+        if key in valid:
+            duplicate.add(key)
+            continue
+        if phase in ('viewer', 'story'):
+            score_keys = ('hook_score', 'clarity_score') if phase == 'viewer' else ('cliffhanger_score', 'pacing_score')
+            str_keys = ('hook_event_id', 'confusion_reason') if phase == 'viewer' else ('cliff_event_id', 'promo_angle', 'explanation')
+            if any(isinstance(v.get(k), bool) or not isinstance(v.get(k), (int, float))
+                   or int(v[k]) != v[k] or not 0 <= v[k] <= 5 for k in score_keys):
+                continue
+            if any(not isinstance(v.get(k), str) for k in str_keys):
+                continue
+        valid[key] = v
+    for key in duplicate:
+        valid.pop(key, None)
+    return valid
 
 
-def _roundtrip_cached(client, model, prompt, cache_dir: Path | None) -> dict:
+def _roundtrip_cached(client, model, prompt, cache_dir: Path | None,
+                      batch: list[dict], phase: str) -> dict:
+    """Only cache complete, schema-validated responses for the exact prompt/model."""
     if cache_dir is None:
         return _call_gemini(client, model, prompt)
     cache_dir.mkdir(exist_ok=True, parents=True)
     key = hashlib.sha256((model + '\n' + prompt).encode()).hexdigest()
     cache_file = cache_dir / (key + '.json')
     if cache_file.exists():
-        return json.loads(cache_file.read_text(encoding='utf-8'))
+        try:
+            cached = json.loads(cache_file.read_text(encoding='utf-8'))
+            if len(_valid_results(cached, batch, phase)) == len(batch):
+                return cached
+        except (ValueError, OSError):
+            pass
+        cache_file.unlink(missing_ok=True)  # A broken cache must not poison later runs.
     response = _call_gemini(client, model, prompt)
-    cache_file.write_text(json.dumps(response, ensure_ascii=False, indent=2), encoding='utf-8')
+    if len(_valid_results(response, batch, phase)) == len(batch):
+        cache_file.write_text(json.dumps(response, ensure_ascii=False, indent=2), encoding='utf-8')
     return response
 
 
@@ -157,7 +187,7 @@ def choose_to_evaluate(candidates: list[dict], budget: int = 60) -> list[dict]:
     for c in candidates:
         best_per_ep.setdefault(c['episode'], c)
     if budget < len(best_per_ep):
-        return candidates[:budget]
+        raise ValueError(f'AI budget {budget} is too small for {len(best_per_ep)}-episode coverage; increase the budget.')
     chosen = list(best_per_ep.values())
     seen = {c['id'] for c in chosen}
     for c in candidates:
@@ -192,8 +222,8 @@ def evaluate_gemini(episodes: list[Episode], candidates: list[dict], api_key: st
                 batch = selected[k:k+batch_size]
                 prompt = _make_batch_prompt(by_ep, batch, phase)
                 try:
-                    blob = _roundtrip_cached(client, model, prompt, cache_dir)
-                    res = _valid_results(blob, batch)
+                    blob = _roundtrip_cached(client, model, prompt, cache_dir, batch, phase)
+                    res = _valid_results(blob, batch, phase)
                     (viewer if phase == 'viewer' else story).update(res)
                     if len(res) != len(batch):
                         errors.append(f'{phase} batch {k//batch_size + 1}: {len(res)}/{len(batch)} IDs returned')

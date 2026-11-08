@@ -14,7 +14,7 @@ import zipfile
 
 SCENE_RE = re.compile(r"(?im)^SCENE\s+(\d+)\s*$")
 TAG_RE = re.compile(r"(?m)^\*\*(.+?):\*\*\s*$")
-TIMING_RE = re.compile(r"(?im)^Start:\s*\((\d{2}:\d{2}(?:\.\d+)?)\)\s*\|\s*End:\s*\((\d{2}:\d{2}(?:\.\d+)?)\)\s*$")
+TIMING_RE = re.compile(r"(?im)^Start:\s*\((\d{2}:\d{2}(?::\d{2})?(?:\.\d+)?)\)\s*\|\s*End:\s*\((\d{2}:\d{2}(?::\d{2})?(?:\.\d+)?)\)\s*$")
 META_RE = re.compile(r"(?im)^(EPISODE NUMBER|EPISODE LOGLINE|CONTINUITY NOTES):\s*(.*)$")
 SCENE_INFO_RE = re.compile(r"(?im)^Scene\s+(heading|start|end):\s*(.*)$")
 
@@ -37,8 +37,15 @@ RESOLUTION_TERMS = ("fade to black", "fade out", "gentle music", "relief", "peac
 
 
 def sec(timestamp: str) -> float:
-    mm, ss = timestamp.split(":", 1)
-    return round(int(mm) * 60 + float(ss), 2)
+    """Parse either MM:SS.ss or HH:MM:SS.ss timestamps."""
+    fields = timestamp.split(':')
+    if len(fields) == 2:
+        mm, ss = fields
+        return round(int(mm) * 60 + float(ss), 2)
+    if len(fields) == 3:
+        hh, mm, ss = fields
+        return round(int(hh) * 3600 + int(mm) * 60 + float(ss), 2)
+    raise ValueError(f'Unsupported timestamp: {timestamp}')
 
 
 def stamp(value: float) -> str:
@@ -70,11 +77,13 @@ class Episode:
     scenes: list[dict]
     events: list[Event]
     filename: str
+    skipped_entries: int = 0
 
     def to_json(self, include_events: bool = False) -> dict:
         data = {"number": self.number, "title": self.title, "logline": self.logline,
                 "continuity": self.continuity, "duration_seconds": self.duration,
-                "scenes": self.scenes, "event_count": len(self.events), "filename": self.filename}
+                "scenes": self.scenes, "event_count": len(self.events), "filename": self.filename,
+                "skipped_timed_entries": self.skipped_entries}
         if include_events:
             data["events"] = [e.to_json() for e in self.events]
         return data
@@ -94,6 +103,7 @@ def parse_script(script: str, filename: str = "episode.txt") -> Episode:
         raise ValueError(f"No scene headers in {filename}")
     scenes = []
     events = []
+    skipped_entries = 0
     for idx, m in enumerate(scene_matches):
         scene_no = int(m.group(1))
         section = script[m.end():scene_matches[idx + 1].start() if idx + 1 < len(scene_matches) else len(script)]
@@ -108,16 +118,22 @@ def parse_script(script: str, filename: str = "episode.txt") -> Episode:
             segment = section[tag.end():tags[j+1].start() if j+1 < len(tags) else len(section)]
             timed = TIMING_RE.search(segment)
             if not timed:
+                skipped_entries += 1
                 continue
             start, end = sec(timed.group(1)), sec(timed.group(2))
             if end <= start:
+                skipped_entries += 1
                 continue
             text = segment[timed.end():].split("--- SCRIPT END ---")[0].strip()
             text = re.sub(r"\s+", " ", text).strip()
             if not text:
+                skipped_entries += 1
                 continue
             label = tag.group(1).strip()
-            kind = label.upper() if label.upper() in ("CAMERA", "ACTION", "SOUND FX", "SFX", "MUSIC") else "DIALOGUE"
+            if label.upper() in ("CAMERA", "ACTION", "SOUND FX", "SFX", "MUSIC", "TEXT ON SCREEN"):
+                kind = "ACTION" if label.upper() == "TEXT ON SCREEN" else label.upper()
+            else:
+                kind = "DIALOGUE"
             speaker = label if kind == "DIALOGUE" else ""
             events.append(Event(id=f"E{number:03d}-{len(events):04d}", scene=scene_no,
                                 kind=kind, speaker=speaker, start=start, end=end, text=text))
@@ -129,7 +145,7 @@ def parse_script(script: str, filename: str = "episode.txt") -> Episode:
                    logline=metadata.get("EPISODE LOGLINE", ""),
                    continuity=metadata.get("CONTINUITY NOTES", ""),
                    duration=duration, scenes=scenes, events=sorted(events, key=lambda e: (e.start, e.end)),
-                   filename=filename)
+                   filename=filename, skipped_entries=skipped_entries)
 
 
 def read_episodes(source: bytes | str | Path, name: str = "") -> list[Episode]:
@@ -166,6 +182,20 @@ def _verify_episodes(episodes: list[Episode]) -> list[Episode]:
     return sorted(episodes, key=lambda ep: ep.number)
 
 
+def _has_keyword(text: str, term: str) -> bool:
+    """Use whole words/phrases, except for intentionally truncated stems."""
+    if term == '?':
+        return '?' in text
+    stem = term in ('horrif', 'trembl', 'arriv', 'resolv')
+    pattern = r'(?<!\w)' + re.escape(term) + (r'\w*' if stem else r'(?!\w)')
+    return re.search(pattern, text) is not None
+
+
+def _inside_dialogue(events: list[Event], moment: float) -> bool:
+    """True if a proposed cut would interrupt an actively spoken line."""
+    return any(e.kind == 'DIALOGUE' and e.start + 1e-7 < moment < e.end - 1e-7 for e in events)
+
+
 def _score(evs: list[Event], start: float, end: float) -> tuple[float, dict]:
     """Heuristic prefilter only; its score is not evidence of audience appeal."""
     spoken = [e for e in evs if e.kind in ("DIALOGUE", "ACTION")]
@@ -175,13 +205,13 @@ def _score(evs: list[Event], start: float, end: float) -> tuple[float, dict]:
     opening_text = ' '.join(e.text for e in opening).lower()
     closing_text = ' '.join(e.text for e in closing).lower()
     whole_text = ' '.join(e.text for e in middle).lower()
-    hook_term = sum(1 for word in HOOK_TERMS if word in opening_text)
-    cliff_term = sum(1 for word in CLIFF_TERMS if word in closing_text)
+    hook_term = sum(1 for word in HOOK_TERMS if _has_keyword(opening_text, word))
+    cliff_term = sum(1 for word in CLIFF_TERMS if _has_keyword(closing_text, word))
     if not middle:
         return -100, {}
     hook = min(1, 0.18 + 0.19 * hook_term + 0.14 * bool(opening))
     cliff = min(1, 0.10 + 0.18 * cliff_term + 0.10 * bool(closing))
-    if any(r in closing_text for r in RESOLUTION_TERMS):
+    if any(_has_keyword(closing_text, r) for r in RESOLUTION_TERMS):
         cliff *= 0.6
     dia_count = sum(e.kind == 'DIALOGUE' for e in middle)
     action_count = sum(e.kind == 'ACTION' for e in middle)
@@ -208,11 +238,18 @@ def candidate_text(events: list[Event], start: float, end: float, max_chars: int
 def generate_candidates(episodes: list[Episode], per_episode: int = 4) -> tuple[list[dict], dict]:
     """Covers all episodes, keeps strongest nonduplicate windows per episode."""
     all_candidates = []
-    diagnostics = {"total_generated": 0, "episodes_processed": len(episodes), "per_episode_generated": {}}
+    diagnostics = {"total_generated": 0, "episodes_processed": len(episodes), "per_episode_generated": {},
+                   "skipped_entries": sum(e.skipped_entries for e in episodes),
+                   "unsafe_starts_excluded": 0, "unsafe_ends_excluded": 0,
+                   "cut_rule": "No start or end strictly inside a timed dialogue event"}
     for ep in episodes:
         spoken = [e for e in ep.events if e.kind in ('DIALOGUE', 'ACTION')]
-        opens = sorted(set([0.0] + [e.start for e in spoken]))
-        ends = sorted(set([ep.duration] + [e.end for e in ep.events if e.kind in ('DIALOGUE', 'ACTION', 'CAMERA')]))
+        raw_opens = sorted(set([0.0] + [e.start for e in spoken]))
+        raw_ends = sorted(set([ep.duration] + [e.end for e in ep.events if e.kind in ('DIALOGUE', 'ACTION', 'CAMERA')]))
+        opens = [t for t in raw_opens if not _inside_dialogue(ep.events, t)]
+        ends = [t for t in raw_ends if not _inside_dialogue(ep.events, t)]
+        diagnostics['unsafe_starts_excluded'] += len(raw_opens) - len(opens)
+        diagnostics['unsafe_ends_excluded'] += len(raw_ends) - len(ends)
         rows = []
         seen = set()
         for start in opens:
@@ -265,10 +302,20 @@ def overlap_ratio(a: dict, b: dict) -> float:
     return intersection / union if union else 0.0
 
 
-def shortlist(candidates: list[dict], count: int = 12, max_per_episode: int = 2) -> list[dict]:
+def shortlist(candidates: list[dict], count: int = 12, max_per_episode: int = 2,
+              min_ai_quality: int = 3) -> list[dict]:
+    """Reject weak AI-assessed components before applying score and overlap ranking.
+
+    The threshold is not applied to labelled HEURISTIC_ONLY demonstration clips.
+    """
     selected = []
     epcounts = defaultdict(int)
     for c in sorted(candidates, key=lambda r: (-r['score'], -r.get('heuristic_score',0))):
+        if c.get('method') == 'GEMINI_AI':
+            if any(c.get(k, -1) < min_ai_quality for k in ('hook_score', 'cliffhanger_score', 'clarity_score')):
+                continue
+            if not c.get('hook_evidence_id') or not c.get('cliffhanger_evidence_id'):
+                continue
         if epcounts[c['episode']] >= max_per_episode:
             continue
         if any(overlap_ratio(c, x) > .35 for x in selected):

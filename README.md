@@ -1,81 +1,84 @@
-# Kuku Promo Intelligence — screenplay promo finder
+# Kuku Promo Intelligence — microdrama promo finder
 
-**Built with:** Python, Streamlit, and Gemini API for screenplay-based promo discovery.
+A runnable **Python + Streamlit + Gemini** prototype for Kuku's **Problem 1: Find the Promos**. It proposes continuous 20–60-second promo segments from **timestamped screenplays**, with source-backed hook and cliffhanger evidence, episode/time boundaries, and explanations. The app does **not** edit the footage.
 
-This project discovers continuous 20–60-second promotional moments from timestamped microdrama screenplays. Python produces actual time boundaries; AI (when enabled) assesses hook, cold-viewer clarity, cliffhanger, and pacing.
+## Quick start
 
-## Run locally (Mac / Windows / Linux)
-
-1. Unzip this project's code into its own folder. **Keep the company's screenplay ZIP outside GitHub.**
-2. In Terminal, run from the project directory:
+Keep the company's confidential screenplay ZIP **outside this public repository**. From this source directory:
 
 ```bash
 python3 -m venv .venv
-source .venv/bin/activate
+source .venv/bin/activate       # Windows: .venv\Scripts\activate
 python -m pip install -r requirements.txt
 streamlit run app.py
 ```
 
-On Windows, use `.venv\Scripts\activate` rather than `source .venv/bin/activate`.
+Upload a local ZIP (or individual TXT) in the Streamlit sidebar. Choose:
 
-3. Upload the private screenplay ZIP in the sidebar. The offline baseline runs immediately.
-4. Optional AI mode: obtain a Gemini API key from Google AI Studio, enter it in the sidebar, choose your available model ID, confirm the external processing notice, and click **Find promo moments**. If quota restricts the default model, select another permitted model. **ChatGPT Plus and Gemini Pro consumer subscriptions do not automatically provide API usage credits.**
-5. Download `kuku_raw_run.json` and `kuku_promo_shortlist.csv` from the **Quality and export** tab.
+- **Heuristic demo:** Works without an API key and explicitly labels its results as a baseline.
+- **Gemini AI:** Enter your own `GEMINI_API_KEY` in the sidebar, select your available model ID (`gemini-3.5-flash-lite` is the tested model), acknowledge that screenplay excerpts will go to the API provider, and run. ChatGPT/Gemini consumer subscriptions do not automatically include API credit. API free-tier and quota policies vary.
 
-## Headless repeatable runs
+The UI exports `kuku_raw_run.json` and `kuku_promo_shortlist.csv` from the current run.
 
-Offline baseline (no key):
-
-```bash
-python cli.py "/private/path/to/episodes.zip" --output outputs/baseline
-```
-
-With Gemini semantic ranking (external AI provider, requires API key):
+### Repeatable CLI
 
 ```bash
-export GEMINI_API_KEY="YOUR_KEY"   # only in your own terminal, never in Git
+python cli.py "/private/path/to/episodes.zip" --method heuristic --output outputs/offline
+export GEMINI_API_KEY="YOUR_KEY" # Never commit a real key
 python cli.py "/private/path/to/episodes.zip" --method gemini --model gemini-3.5-flash-lite --ai-budget 60 --output outputs/gemini
 ```
 
-If you want a full episode coverage on the AI stage, use an AI budget at least equal to the episode count (50 for the assignment pack). All episodes are parsed and scored offline before API shortlisting.
+For full-episode Gemini coverage, the budget must be at least the number of parsed episodes (50 in this pack). A lower budget now causes an explicit error instead of silently dropping some episodes.
 
-## How it works
+## Pipeline and evaluation
 
-1. Parse episode numbers, loglines, continuity notes, scene timing and dialogue/action/camera events.
-2. Generate time-bounded candidate clips using actual event starts and ends (20–60s each). Rule-based scoring selects a manageable pool across all episodes; this stage is an imperfect **prefilter**.
-3. In **Gemini AI mode**, evaluate candidate clips twice: a cold-viewer pass (no story context) checks hook and clarity; a story-editor pass (with logline/continuity) checks cliffhanger and pacing.
-4. Score `0.35 * hook + 0.35 * cliffhanger + 0.20 * clarity + 0.10 * pacing` (component scores 0–5, scaled to 100), validate evidence IDs, diversify final ranking, export readable shortlist.
-5. Fully traceable run data includes method, episodes, scores, evidence and diagnostic counts.
+1. Parse episodes, timestamps, scenes, dialogue/action/camera events, and narrative context.
+2. Generate **20–60s** clip windows and select four nonduplicate high-heuristic-score candidates per episode. **No candidate boundary may land strictly inside a timed dialogue event.** The prefilter uses word-boundary matching, not accidental substrings (`hate` in `whatever`, `love` in `glove`).
+3. Gemini performs two passes: a **cold-viewer** hook/clarity evaluation from the clip only, then a **story-aware** cliffhanger/pacing evaluation with episode context. Each AI score is 0–5, and the model must cite actual source event IDs.
+4. Weighted score = **35% hook + 35% cliffhanger + 20% clarity + 10% pacing** (scaled to 100); apply source evidence checks, and exclude AI candidates with **hook/cliffhanger/clarity below 3**, missing hook/cliffhanger evidence, excessive overlap, or too many promos from one episode.
+5. Export ranked clips with provenance. Cache only complete, schema-validated AI responses; incomplete/malformed scores are not silently replaced with numeric defaults. Quota/rate-limit failures are reported.
 
-## Verified assignment run (November 2026)
+**Important limits:** The heuristic first pass may miss the strongest unusual scenes; an AI score is a subjective editorial estimate and does not measure ad conversion or retention. A final editor must confirm cuts against actual footage. Additional providers would require a small SDK adapter; the Gemini model ID itself is configurable.
 
-A private 50-episode test pack produced the following reproducible run summary:
+## Measured results, and why two counts appear
 
-| Measure | Result |
-|---|---:|
-| Episodes parsed | 50/50 |
-| Timecoded screenplay entries | 3,727 |
-| Potential 20–60 second windows enumerated | 6,985 |
-| Windows sent to Gemini semantic evaluation | 60 |
-| Successful semantic evaluations | 60/60 |
-| Episodes represented in AI evaluation | 50/50 |
-| Ranked promo recommendations exported | 12 |
+| Metric | Original recorded Gemini run | Updated boundary-safe generator |
+|---|---:|---:|
+| Episodes parsed | 50 | 50 |
+| Timed entries | 3,727 | 3,727 |
+| Generated candidate windows | 6,985 | 6,796 |
+| Candidate pool retained | 200 | 200 |
+| Gemini semantic evaluations | 60 successful / 60 requested | **Not re-run** |
+| Ranked shortlist | 12 original | 12 **quality-reviewed** from the saved 60 |
 
-**Important:** Gemini evaluated 60 *prefiltered candidates*, not all 6,985 windows. These are model-generated recommendations, not proven advertising outcomes.
+The original run was saved before the dialogue-boundary and quality-gate corrections. The updated parser/generator excludes unsafe boundaries, which explains the reduction from 6,985 to 6,796. **The revised code has not made 60 new Gemini calls.**
 
-**Quality check:** A separate AI-assisted review of the timestamped screenplay found weak cliffhangers in some recommendations and one cut that ended during a spoken line. The project reports these as limitations; it does not claim a human video review or improved viewer retention. The private screenplay pack and raw result files are intentionally not included in this repository.
+The submission's **original raw JSON and CSV are preserved unedited**. A separately named `quality_checked_run.json` and `quality_checked_shortlist.csv` were generated by replaying the **saved 60 AI evaluations** through the stronger quality rules, with the private screenplay pack used to check whether saved clip start/end times cut through speech. These derived outputs do not pretend to be a new independent Gemini run. The original full-pack export remains the reference for AI-request and model-call diagnostics.
 
-## Limitations
+To reproduce the quality review locally:
 
-- Gemini evaluates a selected subset of candidate windows; heuristic prefiltering can miss better moments.
-- Script timing may not exactly match footage, so proposed cut points need a final editor check.
-- The first version supports continuous clips; it does not assemble multi-scene promos.
-- Model scores are editorial estimates, not measured engagement.
+```bash
+python recheck_saved_run.py "/private/path/to/kuku_raw_run_original.json" \
+  --scripts "/private/path/to/episodes.zip" \
+  --output outputs/quality_review
+```
 
+The initial ranking included an Episode 9 scene with cliffhanger 2/5 and an Episode 32 clip with clarity 2/5 that ended inside dialogue. The quality gate eliminates those specific clips. New AI scoring runs can produce different rankings because subjective model ratings are not bit-for-bit reproducible; the walkthrough and original saved results show different executions of the same pipeline.
 
-## Test
+## Cost and scale
+
+A typical 60-candidate run uses **30 model requests** (four clips per request, two phases), plus Python preprocessing. Calls scale with show count, selected candidate budget, and model choice. **Illustrative, not measured billing:** 100,000 input tokens + 10,000 output tokens at Gemini 3.5 Flash-Lite standard published rates ($0.30 / $2.50 per million) is about **$0.055 per 50-episode show**. Actual totals will depend on prompt size, responses, thinking tokens, rate tier, and failures. Official pricing: https://ai.google.dev/gemini-api/docs/pricing.
+
+## Tests
 
 ```bash
 python -m pytest -q
 ```
 
+**13 tests pass** in the revised source, covering parsing, candidate windows, dialogue boundaries, AI mock evaluation, minimum-quality selection, whole-word heuristics, and invalid-cache recovery. No API key or external network access is needed for tests. The complete live Streamlit/Gemini path requires an installed SDK and an authorized Gemini API key.
+
+## Confidentiality
+
+- Never commit `.env`, raw screenplay ZIPs, screenshots of proprietary source text, `.cache/`, or `outputs/` to GitHub.
+- The official assignment pack is intentionally absent from this repository.
+- A human editor should validate source/footage alignment before publishing any recommended promo.

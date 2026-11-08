@@ -25,8 +25,8 @@ with st.sidebar:
         api_key = st.text_input('Gemini API key', value=os.environ.get('GEMINI_API_KEY',''), type='password',
                                 help='Kept in this running session; do not commit keys to GitHub.')
         model = st.text_input('Model ID (editable)', value=model)
-        budget = st.slider('Candidates to review with AI', min_value=10, max_value=120, value=60, step=10,
-                           help='More candidates = more API calls. Around 50 gives at least one per episode.')
+        budget = st.slider('Candidates to review with AI', min_value=50, max_value=120, value=60, step=10,
+                           help='More candidates = more API calls. A budget of 50 guarantees one per episode for this assignment pack.')
         consent = st.checkbox('I understand script excerpts will be sent to the selected AI provider.')
         st.warning('Kuku scripts are confidential. Check the provider’s data-use terms before sending excerpts. Never publish the screenplay pack.')
     else:
@@ -79,6 +79,12 @@ if run:
             candidates_for_output = candidates
             method = 'HEURISTIC_ONLY'
         results = shortlist(candidates_for_output, count=count)
+        if method == 'GEMINI_AI':
+            diag['quality_gate'] = 'Hook, cliffhanger and clarity >= 3, with grounded hook and ending evidence'
+            diag['quality_eligible'] = sum(
+                min(c.get('hook_score', -1), c.get('cliffhanger_score', -1), c.get('clarity_score', -1)) >= 3
+                and c.get('hook_evidence_id') and c.get('cliffhanger_evidence_id')
+                for c in candidates_for_output)
         st.session_state['run_data'] = (episodes, candidates_for_output, diag, results, method)
     except Exception as exc:
         st.error(f'Could not finish processing: {exc}')
@@ -146,6 +152,8 @@ with quality_tab:
     st.write(f'**Episodes processed:** {diag["episodes_processed"]} / {len(episodes)}')
     st.write(f'**AI coverage:** {diag.get("ai_evaluated_episodes",0)} episodes'
              if method == 'GEMINI_AI' else '**AI coverage:** 0 (offline fallback)')
+    if method == 'GEMINI_AI':
+        st.write(f"**Passing quality gate:** {diag.get('quality_eligible',0)} / {len(candidates)} evaluated candidates")
     st.info('Strong hooks and cliffhangers are subjective. Manually review a sample and report a real failure in the solution document.')
     st.subheader('Development-only review rubric')
     st.caption('Use this to test your prototype. The production editor should not need to evaluate every generated candidate.')

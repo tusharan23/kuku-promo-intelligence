@@ -32,6 +32,11 @@ def main():
             raise SystemExit('AI evaluations failed. No silent fallback; rerun with --method heuristic to test baseline.')
         method = 'GEMINI_AI'
     finals = shortlist(candidates, count=args.count)
+    if method == 'GEMINI_AI':
+        diagnostics['quality_gate'] = 'Hook, cliffhanger and clarity >= 3, with grounded hook and ending evidence'
+        diagnostics['quality_eligible'] = sum(
+            min(c.get('hook_score', -1), c.get('cliffhanger_score', -1), c.get('clarity_score', -1)) >= 3
+            and c.get('hook_evidence_id') and c.get('cliffhanger_evidence_id') for c in candidates)
     result = export_result(episodes, candidates, finals, diagnostics, method)
     folder = Path(args.output)
     folder.mkdir(exist_ok=True, parents=True)
